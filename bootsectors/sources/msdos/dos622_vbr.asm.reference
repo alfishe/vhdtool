@@ -1,0 +1,227 @@
+; VBR - Volume Boot Record (FAT16)
+; Auto-generated from binary - DO NOT EDIT directly
+; Reassemble with: nasm -f bin -o vbr.bin vbr.asm
+
+BITS 16
+ORG 0x7C00
+
+jmp short 0x7C3E
+nop
+
+; BIOS Parameter Block (BPB)
+bpb_oem:            db "MSDOS5.0"
+bpb_bytes_per_sec:  dw 512
+bpb_sec_per_clust:  db 8
+bpb_reserved:       dw 1
+bpb_num_fats:       db 2
+bpb_root_entries:   dw 512
+bpb_total_sec_16:   dw 0
+bpb_media:          db 0xF8
+bpb_fat_size_16:    dw 199
+bpb_sec_per_track:  dw 63
+bpb_heads:          dw 32
+bpb_hidden:         dd 63
+bpb_total_sec_32:   dd 407169
+
+; Extended Boot Record
+ebr_drive:          db 0x80
+ebr_reserved:       db 0x00
+ebr_signature:      db 0x29
+ebr_serial:         dd 0x12211B01
+ebr_label:          db "NO NAME    "
+ebr_fs_type:        db "FAT16   "
+
+; Boot code
+; Code starts at offset 62 (0x3E)
+    cli                                      ; 00007C3E
+    xor ax,ax                                ; 00007C3F
+    mov ss,ax                                ; 00007C41
+    mov sp,0x7c00                            ; 00007C43
+    push ss                                  ; 00007C46
+    pop es                                   ; 00007C47
+    mov bx,0x78                              ; 00007C48
+    lds si,word [ss:bx]                      ; 00007C4B
+    push ds                                  ; 00007C4E
+    push si                                  ; 00007C4F
+    push ss                                  ; 00007C50
+    push bx                                  ; 00007C51
+    mov di,0x7c3e                            ; 00007C52
+    mov cx,0xb                               ; 00007C55
+    cld                                      ; 00007C58
+    rep movsb                                ; 00007C59
+    push es                                  ; 00007C5B
+    pop ds                                   ; 00007C5C
+    mov byte [di-0x2],0xf                    ; 00007C5D
+    mov cx,[0x7c18]                          ; 00007C61
+    mov [di-0x7],cl                          ; 00007C65
+    mov [bx+0x2],ax                          ; 00007C68
+    mov word [bx],0x7c3e                     ; 00007C6B
+    sti                                      ; 00007C6F
+    int byte 0x13                            ; 00007C70
+    jc 0x7ced                                ; 00007C72
+    xor ax,ax                                ; 00007C74
+    cmp [0x7c13],ax                          ; 00007C76
+    jz 0x7c84                                ; 00007C7A
+    mov cx,[0x7c13]                          ; 00007C7C
+    mov [0x7c20],cx                          ; 00007C80
+    mov al,[0x7c10]                          ; 00007C84
+    mul word [0x7c16]                        ; 00007C87
+    add ax,[0x7c1c]                          ; 00007C8B
+    adc dx,[0x7c1e]                          ; 00007C8F
+    add ax,[0x7c0e]                          ; 00007C93
+    adc dx,0x0                               ; 00007C97
+    mov [0x7c50],ax                          ; 00007C9A
+    mov [0x7c52],dx                          ; 00007C9D
+    mov [0x7c49],ax                          ; 00007CA1
+    mov [0x7c4b],dx                          ; 00007CA4
+    mov ax,0x20                              ; 00007CA8
+    mul word [0x7c11]                        ; 00007CAB
+    mov bx,[0x7c0b]                          ; 00007CAF
+    add ax,bx                                ; 00007CB3
+    dec ax                                   ; 00007CB5
+    div bx                                   ; 00007CB6
+    add [0x7c49],ax                          ; 00007CB8
+    adc word [0x7c4b],0x0                    ; 00007CBC
+    mov bx,0x500                             ; 00007CC1
+    mov dx,[0x7c52]                          ; 00007CC4
+    mov ax,[0x7c50]                          ; 00007CC8
+    call 0x7d60                              ; 00007CCB
+    jc 0x7ced                                ; 00007CCE
+    mov al,0x1                               ; 00007CD0
+    call 0x7d81                              ; 00007CD2
+    jc 0x7ced                                ; 00007CD5
+    mov di,bx                                ; 00007CD7
+    mov cx,0xb                               ; 00007CD9
+    mov si,0x7de6                            ; 00007CDC
+    repe cmpsb                               ; 00007CDF
+    jnz 0x7ced                               ; 00007CE1
+    lea di,[bx+0x20]                         ; 00007CE3
+    mov cx,0xb                               ; 00007CE6
+    repe cmpsb                               ; 00007CE9
+    jz 0x7d05                                ; 00007CEB
+    mov si,0x7d9e                            ; 00007CED
+    call 0x7d52                              ; 00007CF0
+    xor ax,ax                                ; 00007CF3
+    int byte 0x16                            ; 00007CF5
+    pop si                                   ; 00007CF7
+    pop ds                                   ; 00007CF8
+    pop word [si]                            ; 00007CF9
+    pop word [si+0x2]                        ; 00007CFB
+    int byte 0x19                            ; 00007CFE
+    pop ax                                   ; 00007D00
+    pop ax                                   ; 00007D01
+    pop ax                                   ; 00007D02
+    jmp 0x7ced                               ; 00007D03
+    mov ax,[bx+0x1a]                         ; 00007D05
+    dec ax                                   ; 00007D08
+    dec ax                                   ; 00007D09
+    mov bl,[0x7c0d]                          ; 00007D0A
+    xor bh,bh                                ; 00007D0E
+    mul bx                                   ; 00007D10
+    add ax,[0x7c49]                          ; 00007D12
+    adc dx,[0x7c4b]                          ; 00007D16
+    mov bx,0x700                             ; 00007D1A
+    mov cx,0x3                               ; 00007D1D
+    push ax                                  ; 00007D20
+    push dx                                  ; 00007D21
+    push cx                                  ; 00007D22
+    call 0x7d60                              ; 00007D23
+    jc 0x7d00                                ; 00007D26
+    mov al,0x1                               ; 00007D28
+    call 0x7d81                              ; 00007D2A
+    pop cx                                   ; 00007D2D
+    pop dx                                   ; 00007D2E
+    pop ax                                   ; 00007D2F
+    jc 0x7ced                                ; 00007D30
+    add ax,0x1                               ; 00007D32
+    adc dx,0x0                               ; 00007D35
+    add bx,[0x7c0b]                          ; 00007D38
+    loop 0x7d20                              ; 00007D3C
+    mov ch,[0x7c15]                          ; 00007D3E
+    mov dl,[0x7c24]                          ; 00007D42
+    mov bx,[0x7c49]                          ; 00007D46
+    mov ax,[0x7c4b]                          ; 00007D4A
+    jmp word 0x70:word 0x0                   ; 00007D4D
+    lodsb                                    ; 00007D52
+    or al,al                                 ; 00007D53
+    jz 0x7d80                                ; 00007D55
+    mov ah,0xe                               ; 00007D57
+    mov bx,0x7                               ; 00007D59
+    int byte 0x10                            ; 00007D5C
+    jmp 0x7d52                               ; 00007D5E
+    cmp dx,[0x7c18]                          ; 00007D60
+    jnc 0x7d7f                               ; 00007D64
+    div word [0x7c18]                        ; 00007D66
+    inc dl                                   ; 00007D6A
+    mov [0x7c4f],dl                          ; 00007D6C
+    xor dx,dx                                ; 00007D70
+    div word [0x7c1a]                        ; 00007D72
+    mov [0x7c25],dl                          ; 00007D76
+    mov [0x7c4d],ax                          ; 00007D7A
+    clc                                      ; 00007D7D
+    ret                                      ; 00007D7E
+    stc                                      ; 00007D7F
+    ret                                      ; 00007D80
+    mov ah,0x2                               ; 00007D81
+    mov dx,[0x7c4d]                          ; 00007D83
+    mov cl,0x6                               ; 00007D87
+    shl dh,cl                                ; 00007D89
+    or dh,[0x7c4f]                           ; 00007D8B
+    mov cx,dx                                ; 00007D8F
+    xchg ch,cl                               ; 00007D91
+    mov dl,[0x7c24]                          ; 00007D93
+    mov dh,[0x7c25]                          ; 00007D97
+    int byte 0x13                            ; 00007D9B
+    ret                                      ; 00007D9D
+    or ax,0x4e0a                             ; 00007D9E
+    outsw                                    ; 00007DA1
+    outsb                                    ; 00007DA2
+    sub ax,0x7953                            ; 00007DA3
+    jnc 0x7e1c                               ; 00007DA6
+    gs insw                                  ; 00007DA8
+    and [si+0x69],ah                         ; 00007DAA
+    jnc 0x7e1a                               ; 00007DAD
+    and [bx+0x72],ch                         ; 00007DAF
+    and [si+0x69],ah                         ; 00007DB2
+    jnc 0x7e22                               ; 00007DB5
+    and [di+0x72],ah                         ; 00007DB7
+    jc 0x7e2b                                ; 00007DBA
+    jc 0x7dcb                                ; 00007DBC
+    or dl,[bp+si+0x65]                       ; 00007DBE
+    jo 0x7e2f                                ; 00007DC1
+    popa                                     ; 00007DC3
+    arpl [di+0x20],sp                        ; 00007DC4
+    popa                                     ; 00007DC7
+    outsb                                    ; 00007DC8
+    and [fs:bx+si+0x72],dh                   ; 00007DC9
+    gs jnc 0x7e43                            ; 00007DCD
+    and [bx+di+0x6e],ah                      ; 00007DD0
+    jns 0x7df5                               ; 00007DD3
+    imul sp,[di+0x79],0x20                   ; 00007DD5
+    ja 0x7e43                                ; 00007DD9
+    gs outsb                                 ; 00007DDB
+    and [bp+si+0x65],dh                      ; 00007DDD
+    popa                                     ; 00007DE0
+    fs jns 0x7df1                            ; 00007DE1
+    or al,[bx+si]                            ; 00007DE4
+    dec cx                                   ; 00007DE6
+    dec di                                   ; 00007DE7
+    and [bx+si],ah                           ; 00007DE8
+    and [bx+si],ah                           ; 00007DEA
+    and [bx+si],ah                           ; 00007DEC
+    push bx                                  ; 00007DEE
+    pop cx                                   ; 00007DEF
+    push bx                                  ; 00007DF0
+    dec bp                                   ; 00007DF1
+    push bx                                  ; 00007DF2
+    inc sp                                   ; 00007DF3
+    dec di                                   ; 00007DF4
+    push bx                                  ; 00007DF5
+    and [bx+si],ah                           ; 00007DF6
+    and [bp+di+0x59],dl                      ; 00007DF8
+    push bx                                  ; 00007DFB
+    add [bx+si],al                           ; 00007DFC
+
+; Boot signature
+times 510-($-$$) db 0
+dw 0xAA55

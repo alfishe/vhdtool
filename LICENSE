@@ -1,0 +1,60 @@
+MIT License
+
+Copyright (c) 2024 VHDTool Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+================================================================================
+THIRD-PARTY COMPONENTS
+================================================================================
+
+This project includes or references components under different licenses:
+
+1. MS-DOS Source Code and Boot Sectors
+   - Microsoft released MS-DOS 1.25, 2.0, and 4.0 as open source under MIT License
+   - Source: https://github.com/microsoft/MS-DOS
+   - License: MIT License
+   - Note: MS-DOS 6.22 boot sectors are functionally equivalent implementations
+
+2. BootProg Boot Sectors (bootsectors/sources/bootprog/)
+   - Author: Alexei Frounze
+   - License: Public Domain
+   - Source: https://github.com/alexfru/BootProg
+
+3. FreeDOS Boot Sectors (bootsectors/freedos*.bin, bootsectors/sources/freedos/)
+   - License: GNU General Public License v2.0 or later
+   - Source: https://github.com/FDOS/kernel
+   - Note: FreeDOS components remain under GPL v2+
+
+4. Windows 95 Boot Sectors (bootsectors/win95_*.bin)
+   - Windows 95 has its own boot code (not open source)
+   - Provided for educational and interoperability purposes
+   - Original code is © Microsoft Corporation
+
+================================================================================
+SUMMARY
+================================================================================
+
+- VHDTool code, documentation, and educational assembly: MIT License
+- MS-DOS boot sectors: MIT License (Microsoft open-sourced MS-DOS)
+- BootProg: Public Domain
+- FreeDOS: GPL v2+ (remains under GPL)
+- Windows 95 binaries: Educational use only (not open source)
+
+Note: Windows 3.1 uses standard MS-DOS boot sectors (no dedicated bootloader).
