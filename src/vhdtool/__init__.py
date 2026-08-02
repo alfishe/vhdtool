@@ -11,6 +11,7 @@ from .image import VHDImage
 from .fat import FATType, BPB, DirEntry
 from .partition import PartitionEntry
 from .utils import format_size, parse_size
+from .defrag import defragment_image
 
 __all__ = [
     "VHDImage",
@@ -20,4 +21,5 @@ __all__ = [
     "PartitionEntry",
     "format_size",
     "parse_size",
+    "defragment_image",
 ]

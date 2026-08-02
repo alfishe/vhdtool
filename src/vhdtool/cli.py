@@ -12,6 +12,7 @@ from .boot import (
     extract_boot_code_from_image,
     get_boot_sectors,
 )
+from .defrag import defragment_image
 from .image import VHDImage
 from .utils import (
     calculate_fat16_params,
@@ -358,14 +359,12 @@ def cmd_resize(args):
         print("Image is already the requested size")
         return 0
 
-    if new_size < current_size:
-        print("Error: Shrinking not yet supported (risk of data loss)", file=sys.stderr)
-        print(f"Current: {format_size(current_size)}, Requested: {format_size(new_size)}")
-        return 1
-
-    print(f"Resizing {args.image}: {format_size(current_size)} -> {format_size(new_size)}")
-
+    # Analyze current filesystem
     with VHDImage(args.image) as img:
+        if img.is_vhd and img.is_dynamic:
+            print("Error: Resizing dynamic VHD not supported", file=sys.stderr)
+            return 1
+
         partitions = img.get_partitions()
         if not partitions:
             print("Error: No partition found", file=sys.stderr)
@@ -374,6 +373,79 @@ def cmd_resize(args):
         old_part = partitions[0]
         old_bpb = img.bpb
 
+        # Get filesystem statistics for validation
+        stats = img.get_filesystem_stats()
+        highest_cluster = stats['highest_used_cluster']
+        used_bytes = stats['used_bytes']
+
+    new_part_sectors = new_sectors - old_part.start_lba
+
+    # Validate size constraints
+    min_sectors = 4085 + old_part.start_lba  # Minimum for FAT16
+    max_sectors = 4194304 + old_part.start_lba  # 2GB limit for FAT16
+
+    if new_sectors < min_sectors:
+        print(f"Error: Size too small for FAT16 (minimum ~{format_size(min_sectors * 512)})", file=sys.stderr)
+        return 1
+
+    if new_sectors > max_sectors:
+        print(f"Error: Size too large for FAT16 (maximum 2GB)", file=sys.stderr)
+        return 1
+
+    # Calculate new filesystem parameters
+    try:
+        new_params = calculate_fat16_params(new_part_sectors)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+
+    # Calculate minimum size needed to preserve data
+    if highest_cluster > 1:
+        # Sectors needed: partition start + reserved + FATs + root dir + data up to highest cluster
+        min_data_clusters = highest_cluster - 1  # clusters 2..highest
+        min_data_sectors = min_data_clusters * old_bpb.sectors_per_cluster
+        min_partition_sectors = (old_bpb.reserved_sectors +
+                                 old_bpb.num_fats * old_bpb.fat_size +
+                                 old_bpb.root_dir_sectors +
+                                 min_data_sectors)
+        min_image_sectors = old_part.start_lba + min_partition_sectors
+        min_image_size = min_image_sectors * 512
+    else:
+        min_image_size = (old_part.start_lba + old_bpb.first_data_sector) * 512
+
+    # Check shrinking constraints
+    if new_size < current_size:
+        if new_size < min_image_size:
+            print(f"Error: Cannot shrink below {format_size(min_image_size)} - data would be lost", file=sys.stderr)
+            print(f"  Highest used cluster: {highest_cluster}")
+            print(f"  Data in use: {format_size(used_bytes)}")
+            return 1
+
+        # Check if FAT table parameters would change
+        if new_params['fat_size'] != old_bpb.fat_size or \
+           new_params['sectors_per_cluster'] != old_bpb.sectors_per_cluster:
+            print("Error: Shrinking requires filesystem reorganization (not yet supported)", file=sys.stderr)
+            print(f"  Current: {old_bpb.sectors_per_cluster} sectors/cluster, FAT size {old_bpb.fat_size}")
+            print(f"  New: {new_params['sectors_per_cluster']} sectors/cluster, FAT size {new_params['fat_size']}")
+            print("  Workaround: backup files, reformat, restore files")
+            return 1
+
+        print(f"Shrinking {args.image}: {format_size(current_size)} -> {format_size(new_size)}")
+        print(f"  Data in use: {format_size(used_bytes)} (highest cluster: {highest_cluster})")
+
+    else:
+        print(f"Growing {args.image}: {format_size(current_size)} -> {format_size(new_size)}")
+
+        # Check if FAT needs to grow
+        if new_params['fat_size'] > old_bpb.fat_size:
+            print("Error: Growing beyond current FAT capacity requires filesystem reorganization", file=sys.stderr)
+            print(f"  Current FAT size: {old_bpb.fat_size} sectors")
+            print(f"  Required FAT size: {new_params['fat_size']} sectors")
+            print("  The data region would need to shift, which is not yet supported.")
+            print("  Workaround: backup files, create new larger image, restore files")
+            return 1
+
+    # Create backup
     backup_path = args.image + ".backup"
     if not args.no_backup:
         print(f"Creating backup: {backup_path}")
@@ -381,33 +453,61 @@ def cmd_resize(args):
 
     try:
         with open(args.image, 'r+b') as f:
-            f.seek(new_size - 1)
-            f.write(b'\x00')
+            if new_size > current_size:
+                # Extend file
+                f.seek(new_size - 1)
+                f.write(b'\x00')
+            else:
+                # Truncate file
+                f.truncate(new_size)
 
+            # Update partition table entry
             f.seek(446 + 12)
-            new_part_size = new_sectors - old_part.start_lba
-            f.write(struct.pack('<I', new_part_size))
+            f.write(struct.pack('<I', new_part_sectors))
 
+            # Update CHS end values (use LBA for large disks)
+            # Partition entry bytes 5-7 are ending CHS
+            if new_sectors < 16450560:  # ~8GB CHS limit
+                # Calculate CHS from LBA
+                end_lba = new_sectors - 1
+                heads = 16
+                sectors = 63
+                c = end_lba // (heads * sectors)
+                h = (end_lba // sectors) % heads
+                s = (end_lba % sectors) + 1
+                if c > 1023:
+                    c, h, s = 1023, 254, 63  # Max CHS values
+                f.seek(446 + 5)
+                f.write(bytes([h, ((c >> 8) << 6) | s, c & 0xFF]))
+
+            # Update BPB total sectors
             part_offset = old_part.start_lba * 512
-            f.seek(part_offset + 19)
-            old_total_16 = struct.unpack('<H', f.read(2))[0]
-
-            if old_total_16 > 0 and new_part_size < 65536:
+            if new_part_sectors < 65536:
                 f.seek(part_offset + 19)
-                f.write(struct.pack('<H', new_part_size))
+                f.write(struct.pack('<H', new_part_sectors))
+                f.seek(part_offset + 32)
+                f.write(struct.pack('<I', 0))
             else:
                 f.seek(part_offset + 19)
                 f.write(struct.pack('<H', 0))
                 f.seek(part_offset + 32)
-                f.write(struct.pack('<I', new_part_size))
+                f.write(struct.pack('<I', new_part_sectors))
 
-            params = calculate_fat16_params(new_part_size)
+        # Verify the result
+        with VHDImage(args.image) as img:
+            new_stats = img.get_filesystem_stats()
+            partitions = img.get_partitions()
 
-            if params['fat_size'] > old_bpb.fat_size:
-                print("Warning: FAT table needs to grow - this requires data relocation")
-                print("For now, the extra space won't be usable until reformatted")
+            if not partitions:
+                raise ValueError("Partition table corrupted after resize")
 
-        print(f"Resized to {format_size(new_size)}")
+            if img.bpb is None:
+                raise ValueError("BPB corrupted after resize")
+
+            print(f"Resized successfully to {format_size(new_size)}")
+            print(f"  Partition: {format_size(partitions[0].size_sectors * 512)}")
+            print(f"  Available: {format_size(new_stats['free_bytes'])} free")
+
         if not args.no_backup:
             print(f"Backup saved as: {backup_path}")
             print("Delete backup manually after verifying data integrity")
@@ -418,6 +518,90 @@ def cmd_resize(args):
             print("Restoring from backup...")
             shutil.move(backup_path, args.image)
         return 1
+
+    return 0
+
+
+def cmd_defrag(args):
+    """Create defragmented copy of disk image."""
+    if not os.path.exists(args.image):
+        print(f"Error: {args.image} not found", file=sys.stderr)
+        return 1
+
+    # Determine output path
+    if args.output:
+        dest_path = args.output
+    else:
+        base, ext = os.path.splitext(args.image)
+        dest_path = f"{base}_defrag{ext}"
+
+    if os.path.exists(dest_path) and not args.force:
+        print(f"Error: {dest_path} already exists (use --force to overwrite)", file=sys.stderr)
+        return 1
+
+    if os.path.exists(dest_path) and args.force:
+        os.remove(dest_path)
+
+    # Parse new size if specified
+    new_size = None
+    if args.size:
+        new_size = parse_size(args.size)
+        new_size = (new_size // 512) * 512
+
+    # Get source stats
+    with VHDImage(args.image) as img:
+        if img.is_vhd and img.is_dynamic:
+            print("Error: Dynamic VHD not supported for defragmentation", file=sys.stderr)
+            return 1
+
+        source_stats = img.get_filesystem_stats()
+        source_size = os.path.getsize(args.image)
+
+    # Validate new size if shrinking
+    if new_size and new_size < source_size:
+        min_size = source_stats['used_bytes'] + (1024 * 1024)  # Add 1MB buffer
+        if new_size < min_size:
+            print(f"Error: New size too small to fit data", file=sys.stderr)
+            print(f"  Data in use: {format_size(source_stats['used_bytes'])}")
+            print(f"  Minimum size: ~{format_size(min_size)}")
+            return 1
+
+    print(f"Defragmenting: {args.image}")
+    print(f"  Source: {format_size(source_size)}, {source_stats['used_clusters']} clusters used")
+    if new_size:
+        print(f"  Target size: {format_size(new_size)}")
+    print(f"  Output: {dest_path}")
+
+    def progress(phase, current, total):
+        if not args.quiet:
+            if total > 0:
+                print(f"\r  {phase}: {current}/{total}", end='', flush=True)
+            else:
+                print(f"\r  {phase}: {current} files", end='', flush=True)
+
+    try:
+        stats = defragment_image(args.image, dest_path, new_size, progress)
+
+        if not args.quiet:
+            print()  # Newline after progress
+
+        print(f"Defragmentation complete:")
+        print(f"  Files copied: {stats['files_copied']}")
+        print(f"  Bytes copied: {format_size(stats['bytes_copied'])}")
+        print(f"  Fragmentation: {stats['fragmentation_before']*100:.1f}% -> {stats['fragmentation_after']*100:.1f}%")
+
+        # Verify output
+        with VHDImage(dest_path) as img:
+            dest_stats = img.get_filesystem_stats()
+            print(f"  Result: {dest_stats['used_clusters']} clusters, {format_size(dest_stats['free_bytes'])} free")
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        if os.path.exists(dest_path):
+            os.remove(dest_path)
+        return 1
+
+    return 0
 
 
 def cmd_listboot(args):
@@ -544,6 +728,8 @@ Examples:
   %(prog)s rm disk.vhd:/TEMP.TXT            Remove file
   %(prog)s create newdisk.vhd 512M          Create 512MB disk
   %(prog)s resize disk.vhd 1G               Resize to 1GB
+  %(prog)s defrag disk.vhd                   Create defragmented copy
+  %(prog)s defrag disk.vhd -s 256M           Defrag and shrink to 256MB
   %(prog)s makeboot disk.vhd --from-image bootable.vhd
   %(prog)s makeboot disk.vhd --extract mydos   Extract boot sectors
   %(prog)s listboot                         List boot sector types
@@ -607,6 +793,14 @@ Examples:
     extractsys_p.add_argument('image', help='Disk image file')
     extractsys_p.add_argument('-o', '--output', default='.', help='Output directory')
     extractsys_p.set_defaults(func=cmd_extract_sys)
+
+    defrag_p = subparsers.add_parser('defrag', help='Create defragmented copy of disk image')
+    defrag_p.add_argument('image', help='Source disk image file')
+    defrag_p.add_argument('-o', '--output', metavar='PATH', help='Output path (default: <image>_defrag.<ext>)')
+    defrag_p.add_argument('-s', '--size', metavar='SIZE', help='New size (e.g., 512M, 1G) - can shrink if data fits')
+    defrag_p.add_argument('-f', '--force', action='store_true', help='Overwrite existing output file')
+    defrag_p.add_argument('-q', '--quiet', action='store_true', help='Suppress progress output')
+    defrag_p.set_defaults(func=cmd_defrag)
 
     args = parser.parse_args()
     result = args.func(args)

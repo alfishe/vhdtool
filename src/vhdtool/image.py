@@ -579,3 +579,44 @@ class VHDImage:
                     data[i*32] = 0xE5
                     self._write_cluster(cluster, bytes(data))
                     return
+
+    def get_highest_used_cluster(self) -> int:
+        """Find the highest cluster number that is in use."""
+        highest = 1  # Clusters start at 2, so 1 means none used
+        for cluster in range(2, self.bpb.cluster_count + 2):
+            entry = self._read_fat_entry(cluster)
+            if entry != 0:  # Not free
+                highest = cluster
+        return highest
+
+    def get_used_cluster_count(self) -> int:
+        """Count the number of clusters in use."""
+        count = 0
+        for cluster in range(2, self.bpb.cluster_count + 2):
+            if self._read_fat_entry(cluster) != 0:
+                count += 1
+        return count
+
+    def get_free_cluster_count(self) -> int:
+        """Count the number of free clusters."""
+        count = 0
+        for cluster in range(2, self.bpb.cluster_count + 2):
+            if self._read_fat_entry(cluster) == 0:
+                count += 1
+        return count
+
+    def get_filesystem_stats(self) -> dict:
+        """Get filesystem statistics."""
+        used = self.get_used_cluster_count()
+        total = self.bpb.cluster_count
+        cluster_size = self.bpb.cluster_size
+        return {
+            'total_clusters': total,
+            'used_clusters': used,
+            'free_clusters': total - used,
+            'cluster_size': cluster_size,
+            'total_bytes': total * cluster_size,
+            'used_bytes': used * cluster_size,
+            'free_bytes': (total - used) * cluster_size,
+            'highest_used_cluster': self.get_highest_used_cluster(),
+        }

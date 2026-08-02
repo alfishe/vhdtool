@@ -118,7 +118,7 @@ def create_mbr(total_sectors: int, bootable: bool = True) -> bytes:
     return bytes(mbr)
 
 
-def create_fat16_boot_sector(params: dict, volume_label: str = "DISK") -> bytes:
+def create_fat16_boot_sector(params: dict, volume_label: str = "DISK", hidden_sectors: int = 63) -> bytes:
     """Create FAT16 boot sector (VBR)."""
     boot = bytearray(512)
 
@@ -141,9 +141,9 @@ def create_fat16_boot_sector(params: dict, volume_label: str = "DISK") -> bytes:
 
     boot[21] = 0xF8
     struct.pack_into('<H', boot, 22, params['fat_size'])
-    struct.pack_into('<H', boot, 24, 63)
-    struct.pack_into('<H', boot, 26, 16)
-    struct.pack_into('<I', boot, 28, 63)
+    struct.pack_into('<H', boot, 24, 63)  # sectors per track
+    struct.pack_into('<H', boot, 26, 16)  # heads
+    struct.pack_into('<I', boot, 28, hidden_sectors)
 
     boot[36] = 0x80
     boot[37] = 0x00

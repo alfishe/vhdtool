@@ -7,7 +7,8 @@ A Python tool for managing VHD and raw disk images with FAT12/FAT16/FAT32 filesy
 - Read/write files to FAT12/FAT16/FAT32 filesystems
 - Support for VHD (fixed and dynamic) and raw disk images
 - Create new disk images with FAT16 formatting
-- Resize existing images (expand only)
+- Resize existing images (grow and shrink with validation)
+- Defragmentation via copy to new image (safe, preserves bootability)
 - Boot sector management and extraction
 - Cross-image file operations
 - No external dependencies - pure Python 3.10+
@@ -65,6 +66,12 @@ vhdtool create newdisk.vhd 512M --label MSDOS622
 # Resize disk image
 vhdtool resize disk.vhd 1G
 
+# Create defragmented copy (files laid out sequentially)
+vhdtool defrag disk.vhd
+
+# Defragment and shrink to smaller size
+vhdtool defrag disk.vhd -s 256M -o disk_small.vhd
+
 # Make disk bootable from another image
 vhdtool makeboot disk.vhd --from-image bootable.vhd
 
@@ -115,6 +122,7 @@ vhdtool/
 │   ├── fat.py          # FAT structures (BPB, DirEntry)
 │   ├── partition.py    # MBR handling
 │   ├── boot.py         # Boot sector management
+│   ├── defrag.py       # Disk defragmentation
 │   └── utils.py        # Utilities
 ├── tests/              # Unit tests
 ├── docs/               # Documentation

@@ -208,3 +208,59 @@ Free cluster: FAT entry = 0
 3. Copy system files (IO.SYS, MSDOS.SYS, COMMAND.COM)
 4. IO.SYS must be first file in root directory
 5. IO.SYS must occupy contiguous clusters (for some DOS versions)
+
+## Disk Resizing
+
+### Growing a Disk
+
+1. Extend file to new size
+2. Update partition table entry (sector count)
+3. Update BPB total_sectors (16 or 32 bit field)
+4. No FAT or data relocation needed if FAT size unchanged
+
+### Shrinking a Disk
+
+1. Check highest used cluster (data must fit in new size)
+2. Verify FAT parameters won't change (cluster size, FAT size)
+3. Update partition table and BPB
+4. Truncate file
+
+### Limitations
+
+- FAT reorganization (changing cluster size or FAT table size) requires full filesystem rebuild
+- Dynamic VHD resize not supported
+
+## Defragmentation
+
+The defrag operation creates a new image with files laid out sequentially:
+
+1. Create new formatted image (same or different size)
+2. Copy boot code from source (preserves bootability)
+3. Copy files sequentially, allocating clusters in order
+4. Result: all files occupy contiguous clusters (0% fragmentation)
+
+### Benefits
+
+- Faster file access (no seeking between fragments)
+- Safe shrinking (files packed at start of data area)
+- Boot sector preserved from source
+
+### Process
+
+```
+Source Image                    Destination Image
+┌─────────────────┐             ┌─────────────────┐
+│ MBR/VBR (boot)  │ ────copy──→ │ MBR/VBR (boot)  │
+├─────────────────┤             ├─────────────────┤
+│ FAT (fragmented)│             │ FAT (linear)    │
+├─────────────────┤             ├─────────────────┤
+│ Root Dir        │ ────copy──→ │ Root Dir        │
+├─────────────────┤             ├─────────────────┤
+│ Data:           │             │ Data:           │
+│  [File1 part 1] │             │  [File1 whole]  │
+│  [File2 part 1] │ ────copy──→ │  [File2 whole]  │
+│  [File1 part 2] │             │  [File3 whole]  │
+│  [File3 part 1] │             │  ...            │
+│  ...            │             │                 │
+└─────────────────┘             └─────────────────┘
+```
